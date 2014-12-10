@@ -20,17 +20,31 @@ TinyGPSPlus gps;
 SoftwareSerial ss(RXPin, TXPin);
   // The serial connection to the GPS device
 RTC_DS1307 rtc;
-String fileName = "POOP";
+File myFile;
+  //Sets precedents for files
 
 void setup() {
   Wire.begin();
   rtc.begin();
+  pinMode(10, OUTPUT);
   Serial.begin(9600);
-  DateTime now = rtc.now();
+  
+  if (SD.exists("example.txt")) {
+    Serial.println("example.txt exists.");
+  }
+  else {
+    Serial.println("example.txt doesn't exist.");
+  }
+  myFile = SD.open("Example.txt", FILE_WRITE);
+  Serial.print("Writing to test.txt...");
+  myFile.println("testing 1, 2, 3.");
+  // close the file:
+  myFile.close();
 }
 
 void loop() {
+  DateTime now = rtc.now();
   Serial.print(now.year(), DEC);
-  Serial.print(fileName);
   delay(3000);
+ 
 }
