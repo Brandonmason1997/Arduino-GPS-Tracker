@@ -21,7 +21,12 @@ SoftwareSerial ss(RXPin, TXPin);
   // The serial connection to the GPS device
 RTC_DS1307 rtc;
 File myFile;
+char filename[] = "00000000.CSV";
   //Sets precedents for files
+float maxSpeed = 0;
+float distance = 0;
+
+
 
 void setup() {
   Wire.begin();
@@ -29,22 +34,37 @@ void setup() {
   pinMode(10, OUTPUT);
   Serial.begin(9600);
   
-  if (SD.exists("example.txt")) {
-    Serial.println("example.txt exists.");
-  }
-  else {
-    Serial.println("example.txt doesn't exist.");
-  }
-  myFile = SD.open("Example.txt", FILE_WRITE);
+  //Insert way of naming file here
+    
+  myFile = SD.open(filename, FILE_WRITE);
   Serial.print("Writing to test.txt...");
   myFile.println("testing 1, 2, 3.");
-  // close the file:
-  myFile.close();
 }
+
+
+
 
 void loop() {
   DateTime now = rtc.now();
-  Serial.print(now.year(), DEC);
-  delay(3000);
- 
+  Serial.print(now.hour(), DEC);
+  Serial.print(now.minute(), DEC);
+  Serial.print("\n");
+  
+  float latitude = gps.location.lat();
+  float longditude = gps.location.lng();
+  
+  float currentSpeed = gps.speed.kmph();
+  if (currentSpeed > maxSpeed) {
+    maxSpeed = currentSpeed;
+  }
+  
+  myFile.print(currentSpeed); 
+  myFile.print(",");
+  myFile.print(latitude);
+  myFile.print(",");
+  myFile.print(longditude);
+  myFile.println();
+  
+  delay (1000);
 }
+
