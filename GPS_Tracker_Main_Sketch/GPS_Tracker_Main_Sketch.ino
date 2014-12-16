@@ -1,7 +1,7 @@
 #include <Wire.h>
 #include "RTClib.h"
   //Library for Real Time Clock, setting the file name
-#include <TinyGPS++.h>
+#include <TinyGPS.h>
   //The cornerstone of the project
 #include <SoftwareSerial.h>
   //Communicating with GPS I suppose
@@ -10,61 +10,90 @@
 #include <SD.h>
   //The SD Library
 
-const int chipSelect = 10;
-  //This is for the Datalogger to communicate with the Uno
-static const int RXPin = 4, TXPin = 3;
-  //Pins assigned for GPS
 static const uint32_t GPSBaud = 9600;
   //GPS Baudrate
-TinyGPSPlus gps;
-SoftwareSerial ss(RXPin, TXPin);
-  // The serial connection to the GPS device
+TinyGPS gps;
 RTC_DS1307 rtc;
 File myFile;
-char filename[] = "00000000.CSV";
   //Sets precedents for files
-float maxSpeed = 0;
-float distance = 0;
-
+SoftwareSerial ss(4, 3);
+int repeat = 0;
 
 
 void setup() {
-  Wire.begin();
-  rtc.begin();
-  pinMode(10, OUTPUT);
+ 
   Serial.begin(9600);
   
-  //Insert way of naming file here
-    
-  myFile = SD.open(filename, FILE_WRITE);
-  Serial.print("Writing to test.txt...");
-  myFile.println("testing 1, 2, 3.");
-}
-
-
-
-
-void loop() {
-  DateTime now = rtc.now();
-  Serial.print(now.hour(), DEC);
-  Serial.print(now.minute(), DEC);
-  Serial.print("\n");
+  pinMode(10, OUTPUT);
   
-  float latitude = gps.location.lat();
-  float longditude = gps.location.lng();
-  
-  float currentSpeed = gps.speed.kmph();
-  if (currentSpeed > maxSpeed) {
-    maxSpeed = currentSpeed;
+  if (!SD.begin(10)) {
+    Serial.println("initialization failed!");
+    return;
   }
   
-  myFile.print(currentSpeed); 
-  myFile.print(",");
-  myFile.print(latitude);
-  myFile.print(",");
-  myFile.print(longditude);
-  myFile.println();
+  if (SD.exists("kayak.CSV")){
+    SD.remove("kayak.CSV");
+  }
   
-  delay (1000);
+  myFile = SD.open("Kayak.CSV", FILE_WRITE);
+  myFile.println("BeginingCSV");
+  myFile.println();
+  myFile.println("Latitude,Londitude,Speed");
+  
+  ss.begin(9600);
+}
+
+void loop() {
+  bool newData = false;
+  
+  // For one second we parse GPS data and report some key values
+  for (unsigned long start = millis(); millis() - start < 1000;)
+  {
+    while (ss.available())
+    {
+      char c = ss.read();
+      // Serial.write(c); // uncomment this line if you want to see the GPS data flowing
+      if (gps.encode(c)) // Did a new valid sentence come in?
+        newData = true;
+    }
+  }
+
+  if (newData)
+  {
+    float flat, flon, fkph;
+    unsigned long age;
+    gps.f_get_position(&flat, &flon, &age);
+    fkph = gps.f_speed_kmph();
+    
+    if (fkph == -1.00){
+      fkph = 0.00;
+    }
+    
+    Serial.print("LAT = ");
+    Serial.print(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat, 8);
+    Serial.print(" LON = ");
+    Serial.print(flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon, 8);
+    Serial.println();
+    Serial.print("SPEED = ");
+    Serial.print(fkph);
+    Serial.println();
+    if (Serial){
+      myFile.print(flat);
+      myFile.print(",");
+      myFile.print(flon);
+      myFile.print(",");
+      myFile.print(fkph);
+      myFile.println();
+    }
+    else {
+      myFile.close();
+    }
+    repeat = repeat + 1;
+    
+    if (!myFile) {
+      Serial.print("Cannot Write To File");
+    }
+  }
+ delay(1000);
 }
 
