@@ -1,4 +1,6 @@
 #include <Wire.h>
+#include "RTClib.h"
+  //Library for Real Time Clock, setting the file name
 #include <TinyGPS.h>
   //The cornerstone of the project
 #include <SoftwareSerial.h>
@@ -11,9 +13,12 @@
 static const uint32_t GPSBaud = 9600;
   //GPS Baudrate
 TinyGPS gps;
+RTC_DS1307 rtc;
 File myFile;
   //Sets precedents for files
 SoftwareSerial ss(4, 3);
+int repeat = 0;
+
 
 void setup() {
  
@@ -26,12 +31,14 @@ void setup() {
     return;
   }
   
-  if (SD.exists("Kayak.CSV")){
-    SD.remove("Kayak.CSV");
+  if (SD.exists("kayak.log")){
+    SD.remove("kayak.log");
   }
   
-  myFile = SD.open("Kayak.CSV", FILE_WRITE);
-  myFile.println("time,latitude,longitude,speed");
+  myFile = SD.open("Kayak.log", FILE_WRITE);
+  myFile.println("BeginingCSV");
+  myFile.println();
+  myFile.println("Latitude,Londitude,Speed");
   myFile.close();
   
   ss.begin(9600);
@@ -39,7 +46,7 @@ void setup() {
 
 void loop() {
   
-  myFile = SD.open("Kayak.CSV", FILE_WRITE);
+  myFile = SD.open("Kayak.log", FILE_WRITE);
   bool newData = false;
   
   // For one second we parse GPS data and report some key values
@@ -48,6 +55,8 @@ void loop() {
     while (ss.available())
     {
       char c = ss.read();
+      Serial.print(c);
+      myFile.print(c);
       // Serial.write(c); // uncomment this line if you want to see the GPS data flowing
       if (gps.encode(c)) // Did a new valid sentence come in?
         newData = true;
@@ -56,15 +65,15 @@ void loop() {
 
   if (newData)
   {
-    float flat, flon, speed;
-    int year;
-    byte month, day, hour, minute, second;
+    float flat, flon, fkph;
     unsigned long age;
     gps.f_get_position(&flat, &flon, &age);
-    gps.crack_datetime(&year, &month, &day, &hour, &minute, &second);
-    char sz[32];
-    speed = gps.speed();
-       
+    fkph = gps.f_speed_kmph();
+    
+    if (fkph == -1.00){
+      fkph = 0.00;
+    }
+    
     if (Serial) {
       Serial.print("LAT = ");
       Serial.print(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat, 8);
@@ -72,25 +81,13 @@ void loop() {
       Serial.print(flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon, 8);
       Serial.println();
       Serial.print("SPEED = ");
-      Serial.print(speed);
-      Serial.print(" Time = ");
-      sprintf(sz, "%02d:%02d:%02d",
-        hour, minute, second);
-      Serial.print(sz);
+      Serial.print(fkph);
       Serial.println();
     }
     
-    if (myFile){
-      myFile.print(sz);
-      myFile.print(",");
-      myFile.print(flat, 8);
-      myFile.print(",");
-      myFile.print(flon, 8);
-      myFile.print(",");
-      myFile.print(speed, 2);
-      myFile.println();
-    }
     myFile.close();
   }
+ delay(1000);
 }
+
 
