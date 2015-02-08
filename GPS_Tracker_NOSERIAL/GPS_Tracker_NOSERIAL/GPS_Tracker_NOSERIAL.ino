@@ -1,8 +1,8 @@
 /*
-To be used for debugging, innovating or testing, this file is 
-heavier on the Arduino due to Serial communications 
-with the tethered computer. Increases memory load for the 
-arduinio causing decreased reliable perfomrance.
+Not to be used for debugging or testing, this file is 
+lighter on the Arduino removing most Serial communications 
+with the tethered computer. Reduces memory load for the 
+arduinio for increased reliable perfomrance.
 */
 
 #include <TinyGPS.h>
@@ -24,45 +24,29 @@ File myFile;
   //Sets precedents for RTC, GPS and Files
 SoftwareSerial ss(4, 3);
   //Establishes coms pins for GPS
-int cyear, cmonth, cday, chour, cminute, dataNumber = 0, previoushuntime;
+  
+int dataNumber = 0, cyear, cmonth, cday, chour, cminute, csecond;
+long huntime, previoushuntime, previousdeltax;
+float previousFlat, previousFlon, totaldistance;
 char * filename;
-float maxspeed = 0, previousFlat, previousFlon, totaldistance;
 
 void setup() {
   
   Serial.begin(9600);
-    //Begin communications serial, baud rate of 9600
-
+    //Only Serial coms in the sketch, without this, the sketch will not function
+  
   ss.begin(9600);
     //Begin communications with GPS module, baud rate set to 9600, the standard for SKM 255
   
   delay(1000);
     //Wait a second to ensure communication is fixed, this may be unneccessary
   
-  
-  if (ss.available()) {
-    Serial.println("GPS");
-  }
-  else {
-    Serial.println("!GPS");
-  }
-    //If the GPS does not communicate, return an error through Serial, uncomment for diagnostics
-  
   ss.print("$PMTK314,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0*19<CR><LF>");
     //Ensuring appropriate NMEA sentences will be submitted from the unit
   
   pinMode(10, OUTPUT);
     //Begin communications with SD sheild, pin 10 output
-  
-  if (!SD.begin(10)) {
-    Serial.println("!SD");
-    return;
-  }
-  else {
-    Serial.println("SD");
-  }
-    //If the SD did not initiate, return an error through serial, uncomment for diagnostics
-  
+    
   Wire.begin();
   rtc.begin();
     //Begins coms with RTC
@@ -74,6 +58,10 @@ void setup() {
   cminute = now.minute();
     //Grabbing values for time & date
   
+  if ((cmonth > 9 and cday > 5) or (cmonth < 4 and cday < 6)) {
+      chour = chour + 1;
+  }
+  
   delay(1000);
     //Wait a second
     
@@ -82,8 +70,7 @@ void setup() {
     //Sets filename
   
   myFile = SD.open(filename, FILE_WRITE);
-  //Serial.println(filename);
-    //Create new file, uncomment for diagnostics
+    //Create new file
   myFile.println("type,name,desc,latitude,longitude");
     //Create file headers for CSV format
   myFile.flush();
@@ -93,9 +80,11 @@ void setup() {
 void loop() {
   
   bool newData = false;
-  float flat, flon, altitude, speedmps, speedkmph, deltax;
-  int year, HDOP, age, huntime;
-  byte month, day, hour, minute, second, hundredths, satellites, csecond, deltat;
+  float flat, flon, altitude, speedmps, deltax, maxspeed = 0;
+  int satellites, year, HDOP;
+  byte month, day, hour, minute, second, hundredths;
+  unsigned long age;
+  long deltat;
   char sz[32];
   String dataType;
     //Setting variables to be used later in program
@@ -137,6 +126,12 @@ void loop() {
     trackpoints which show the path travelled
     */
     
+    if ((cmonth > 9 and cday > 5) or (cmonth < 4 and cday < 6)) {
+      chour = chour + 1;
+    }
+      //Daylight Savings error fixing for eastern Australia states, Uncomment if elsewhere
+    
+    
     huntime = (hour*360000) + (minute*6000) + (second*100) + hundredths;
       //Finding change in time between locks, should be 1 Second, using this instead of 1 second for speed calculations allows users to change fix time on GPS
     
@@ -145,40 +140,34 @@ void loop() {
     
     deltax  = TinyGPS::distance_between(flat, flon, previousFlat, previousFlon);
       //Retreiving the change in distance from the previous point
-         
-    speedmps = deltax / deltat;
-      /*Locks are made approximately once every second, finding distance over 2 locks and dividing that by time for the locks 
-      gives more realistic results. Also allows errors in deltax to diluted errors in speed. Improving this could be done by 
-      equating previous 5 points for speed, achieving an average, not instantaneous.
-      */
-    speedkmph = speedmps*3.6;
     
-    if (speedkmph > maxspeed) {
-      maxspeed = speedkmph;
+    if (deltax > 100){
+      deltax = 0;
     }
-      
-    if (Serial) {
-      Serial.print(" LAT = ");
-      Serial.print(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat, 8);
-      Serial.print(" LON = ");
-      Serial.print(flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon, 8);
-      Serial.println();
+    
+    totaldistance = totaldistance + deltax;
+      //Equating total distance travelled NOT displacement
+    
+    speedmps = deltax / deltat;
+    
+    if (speedmps > maxspeed) {
+      maxspeed = speedmps;
     }
+    
     sprintf(sz, "%d/%d/%d %d:%d", cday, cmonth, cyear, chour, cminute);
     
-    if (myFile and (deltax < 10000)){
+    if (myFile){
       myFile.print(dataType);
       myFile.print(",");
       myFile.print(sz);
-      myFile.print(",Speed = ");
-      myFile.print(speedkmph, 2);
-      myFile.print("km/h Max Speed = ");
-      myFile.print(maxspeed, 2);
-      myFile.print("km/h Altitude = ");
+        //Printing the time
+      myFile.print(",SPEED = ");
+      myFile.print(speedmps, 2);
+      myFile.print("m/s   Altitude = ");
       myFile.print(altitude);
-      myFile.print("m Satellites = ");
+      myFile.print("m  Satellites = ");
       myFile.print(satellites);
-      myFile.print(" Distance = ");
+      myFile.print(" Distance Travelled = ");
       myFile.print(totaldistance);
       myFile.print(" m,");
       myFile.print(flat, 8);
@@ -192,17 +181,11 @@ void loop() {
     myFile.flush();
       //Flush data to file, saving progress
     
-    if (deltax > 10000){
-      deltax = 0;
-    }
-    
-    totaldistance = totaldistance + deltax;
-      //Equating total distance travelled NOT displacement
-    
     dataNumber = dataNumber + 1;
       //Used to specify data type earlier in sketch
     previousFlat = flat;
     previousFlon = flon;
+    previousdeltax = deltax;
       //Used for comparison between points
   }
 }
